@@ -1,4 +1,5 @@
 const request = require("supertest");
+const crypto = require("node:crypto");
 
 const app = require("../src/app");
 
@@ -6,13 +7,42 @@ const database = require("../database");
 
 afterAll(() => database.end());
 
-describe("GET /api/users", () => {
-  it("should return all users", async () => {
-    const response = await request(app).get("/api/users");
+describe("POST /api/users", () => {
+  it("should return created user", async () => {
+    const newUser = {
+      firstname: "Marie",
+      lastname: "Martin",
+      email: `${crypto.randomUUID()}@wild.co`,
+      city: "Paris",
+      language: "French",
+    };
+    const response = await request(app).post("/api/users").send(newuser);
 
     expect(response.headers["content-type"]).toMatch(/json/);
+    expect(response.status).toEqual(201);
+    expect(response.body).toHaveProperty("id");
+    expect(typeof response.body.id).toBe("number");
 
-    expect(response.status).toEqual(200);
+    const [result] = await database.query(
+      "SELECT * FROM users WHERE id=?",
+      response.body.id
+    );
+
+    const [userInDatabase] = result;
+
+    expect(userInDatabase).toHaveProperty("id");
+
+    expect(userInDatabase).toHaveProperty("lastname");
+    expect(userInDatabase.lastname).toStrictEqual(newuser.lastname);
+  });
+  it("should return an error", async () => {
+    const userWithMissingProps = { lastname: "Harry" };
+
+    const response = await request(app)
+      .post("/api/users")
+      .send(userWithMissingProps);
+
+    expect(response.status).toEqual(500);
   });
 });
 
